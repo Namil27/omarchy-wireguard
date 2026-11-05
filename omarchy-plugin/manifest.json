@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "namil27.wireguard",
   "name": "WireGuard",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Namil27",
   "license": "MIT",
   "description": "WireGuard status and profile controls for Omarchy Shell.",

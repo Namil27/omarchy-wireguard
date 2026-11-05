@@ -100,45 +100,109 @@ def active_owned(data):
     return [key for key in owned(data) if key in active]
 
 
-def handshake(key):
+def connection_iface(key):
     device = nm("-g", "GENERAL.DEVICES", "connection", "show", key, timeout=5)
     if device.returncode or not device.stdout.strip():
-        return "Состояние связи неизвестно"
+        return None
     iface = device.stdout.strip().splitlines()[0]
     if not re.fullmatch(r"[a-zA-Z0-9_.-]{1,15}", iface):
-        return "Состояние связи неизвестно"
-    result = run("wg", "show", iface, "latest-handshakes", timeout=5)
-    if result.returncode:
-        return "Рукопожатие недоступно для проверки"
+        return None
+    return iface
+
+
+def active_connection_path(iface):
+    result = nm("-g", "GENERAL.CON-PATH", "device", "show", iface, timeout=5)
+    path = result.stdout.strip()
+    if result.returncode or not path.startswith("/org/freedesktop/NetworkManager/ActiveConnection/"):
+        return None
+    return path
+
+
+def latest_handshake(output):
     stamps = []
-    for line in result.stdout.splitlines():
+    for line in output.splitlines():
         try:
             stamps.append(int(line.rsplit("\t", 1)[-1]))
         except ValueError:
             pass
-    if stamps and max(stamps) and time.time() - max(stamps) < 180:
+    return max(stamps, default=0)
+
+
+def handshake_message(stamp):
+    if stamp and 0 <= time.time() - stamp < 180:
         return "Рукопожатие подтверждено за последние 3 минуты"
     return "Туннель включён; свежего рукопожатия нет"
+
+
+def handshake(key, data):
+    iface = connection_iface(key)
+    if iface is None:
+        return "Туннель включён; интерфейс для проверки не найден"
+    result = run("wg", "show", iface, "latest-handshakes", timeout=5)
+    if result.returncode == 0:
+        return handshake_message(latest_handshake(result.stdout))
+    cached = data.get("verification")
+    if not isinstance(cached, dict):
+        cached = {}
+    checked_at = cached.get("checked_at")
+    latest = cached.get("latest")
+    if (cached.get("profile") == key and cached.get("interface") == iface
+            and isinstance(checked_at, (int, float))
+            and isinstance(latest, int)
+            and 0 <= time.time() - checked_at < 120
+            and cached.get("connection") == active_connection_path(iface)):
+        return handshake_message(latest) + " (проверено через Polkit)"
+    if "Operation not permitted" in result.stderr or "Permission denied" in result.stderr:
+        return "Туннель включён; проверка связи требует прав. Доступна в меню"
+    return "Туннель включён; проверить рукопожатие не удалось"
+
+
+def verify_handshake():
+    data = read_state()
+    active = active_owned(data)
+    if active is None or len(active) != 1:
+        raise ValueError("Для проверки нужен один активный профиль приложения")
+    key = active[0]
+    iface = connection_iface(key)
+    if iface is None:
+        raise ValueError("Интерфейс WireGuard не найден")
+    connection = active_connection_path(iface)
+    if connection is None:
+        raise ValueError("Активное соединение NetworkManager не найдено")
+    result = run("pkexec", "/usr/bin/wg", "show", iface, "latest-handshakes", timeout=120)
+    if result.returncode:
+        raise ValueError("Проверка не выполнена: подтвердите запрос Polkit или проверьте права")
+    stamp = latest_handshake(result.stdout)
+    with lock_operation():
+        data = read_state()
+        if key not in (active_owned(data) or []) or active_connection_path(iface) != connection:
+            raise ValueError("Профиль изменился во время проверки; повторите её")
+        data["verification"] = {
+            "profile": key, "interface": iface,
+            "connection": connection, "checked_at": time.time(), "latest": stamp,
+        }
+        save(data)
+    notify(handshake_message(stamp))
 
 
 def status():
     data = read_state()
     running = active_owned(data)
     if data.get("busy"):
-        label, css = "󰦖 VPN: переключение", "switching"
+        label, css = "󰦖 WG: переключение", "switching"
         tooltip = data["busy"]
     elif running is None:
-        label, css, tooltip = "󰦖 VPN: ошибка", "error", "NetworkManager недоступен"
+        label, css, tooltip = "󰦖 WG: ошибка", "error", "NetworkManager недоступен"
     elif running:
         key = running[0]
-        label, css = "󰦖 " + data["profiles"][key], "active"
-        tooltip = handshake(key)
+        label, css = "󰦖 WG: " + data["profiles"][key], "active"
+        tooltip = handshake(key, data)
         if len(running) > 1:
             css, tooltip = "error", "Активно несколько профилей приложения"
     elif data.get("error"):
-        label, css, tooltip = "󰦖 VPN: ошибка", "error", data["error"]
+        label, css, tooltip = "󰦖 WG: ошибка", "error", data["error"]
     else:
-        label, css, tooltip = "󰦖 VPN: выкл.", "inactive", "Профили приложения отключены"
+        label, css, tooltip = "󰦖 WG: выкл.", "inactive", "Профили приложения отключены"
     print(json.dumps({"text": label, "tooltip": tooltip, "class": css},
                      ensure_ascii=False), flush=True)
 
@@ -204,6 +268,7 @@ def change(target):
         if old == target:
             return
         data["busy"], data["error"] = "Переключение профиля", None
+        data.pop("verification", None)
         save(data)
         try:
             if old and nm("connection", "down", "uuid", old, timeout=35).returncode:
@@ -249,6 +314,7 @@ def import_files(paths):
                 data["profiles"][key] = name
                 data["quick"] = key
                 data["error"] = None
+                data.pop("verification", None)
                 save(data)
                 logging.info("Импортирован профиль %s", key)
                 notify(f"Импортирован профиль {name}; подключение не включено")
@@ -256,13 +322,56 @@ def import_files(paths):
                 fail(data, f"{Path(raw).name}: {exc}")
 
 
+def render_rofi_theme(source, palette):
+    color_map = {
+        "background": "background",
+        "foreground": "foreground",
+        "selection": "selected",
+        "accent": "accent",
+    }
+    for line in palette.splitlines():
+        match = re.fullmatch(r'\s*([a-z_]+)\s*=\s*"(#[0-9a-fA-F]{6})"\s*', line)
+        if match and match.group(1) in color_map:
+            token = color_map[match.group(1)]
+            source = re.sub(
+                rf"(?m)^(\s*{token}:\s*)#[0-9a-fA-F]{{6}}(?=;)",
+                lambda found: found.group(1) + match.group(2),
+                source, count=1,
+            )
+    return source
+
+
+def rofi_theme():
+    template = Path(__file__).with_name("rofi.rasi")
+    if not template.is_file():
+        return None
+    source = template.read_text()
+    palette_path = Path.home() / ".local/state/omarchy/current/theme/colors.toml"
+    try:
+        source = render_rofi_theme(source, palette_path.read_text())
+    except OSError:
+        pass
+    output = STATE_DIR / "rofi-theme.rasi"
+    if not output.exists() or output.read_text() != source:
+        fd, temporary = tempfile.mkstemp(dir=STATE_DIR, prefix=".rofi-")
+        try:
+            with os.fdopen(fd, "w") as destination:
+                destination.write(source)
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, output)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+    return output
+
+
 def choose(items, prompt="WireGuard"):
     if not items:
         return None
     try:
         command = ["rofi", "-dmenu", "-i", "-p", prompt]
-        theme = Path(__file__).with_name("rofi.rasi")
-        if theme.is_file():
+        theme = rofi_theme()
+        if theme:
             command += ["-theme", str(theme)]
         result = subprocess.run(command,
                                 input="\n".join(items) + "\n", text=True,
@@ -290,7 +399,10 @@ def menu():
         label = f"{mark} {name}" + ("  ★" if key == data.get("quick") else "")
         entries.append(label)
         mapping[label] = key
-    entries += ["Импортировать .conf…", "Отключить", "Быстрое подключение", "Управление профилями…"]
+    entries += ["Импортировать .conf…", "Отключить", "Быстрое подключение"]
+    if len(active) == 1:
+        entries.append("Проверить рукопожатие…")
+    entries.append("Управление профилями…")
     selected = choose(entries)
     if selected in mapping:
         change(mapping[selected])
@@ -300,6 +412,8 @@ def menu():
         change(None)
     elif selected == "Быстрое подключение" and data.get("quick"):
         change(data["quick"])
+    elif selected == "Проверить рукопожатие…":
+        verify_handshake()
     elif selected == "Управление профилями…":
         manage()
 

@@ -47,4 +47,7 @@ if ! jq -e 'any(.bar.layout[][]?; .id == "namil27.wireguard")' "$shell_config" >
   omarchy shell shell rescanPlugins
   omarchy plugin enable namil27.wireguard --section right
 fi
+if ! omarchy restart shell; then
+  printf 'Omarchy Shell will load the updated widget at the next login.\n' >&2
+fi
 printf 'Installed Omarchy Shell WireGuard widget.\n'

@@ -29,4 +29,7 @@ for directory in [plugin_dir, data_dir / "omarchy-wireguard"]:
     if directory.exists() and not any(directory.iterdir()):
         directory.rmdir()
 PY
+if command -v omarchy >/dev/null; then
+  omarchy restart shell >/dev/null 2>&1 || true
+fi
 printf 'Program removed. NetworkManager profiles and app state were preserved.\n'

@@ -1,4 +1,4 @@
-/* Tokyo Night palette from the stock Omarchy theme. */
+/* Fallback palette; the app applies colors from the active Omarchy theme. */
 * {
     background: #1a1b26;
     foreground: #a9b1d6;
@@ -12,9 +12,36 @@ window {
     border-color: @accent;
     border-radius: 8px;
 }
-mainbox { padding: 12px; spacing: 8px; }
-inputbar { text-color: @foreground; }
-listview { lines: 10; spacing: 4px; }
-element { padding: 7px; border-radius: 5px; }
+mainbox {
+    background-color: @background;
+    padding: 12px;
+    spacing: 8px;
+}
+inputbar {
+    background-color: @selected;
+    padding: 8px;
+    border-radius: 5px;
+}
+prompt {
+    background-color: transparent;
+    text-color: @accent;
+}
+entry {
+    background-color: transparent;
+    text-color: @foreground;
+}
+listview {
+    background-color: @background;
+    lines: 10;
+    spacing: 4px;
+}
+element {
+    background-color: @background;
+    padding: 7px;
+    border-radius: 5px;
+}
 element selected { background-color: @selected; }
-element-text { text-color: @foreground; }
+element-text {
+    background-color: transparent;
+    text-color: @foreground;
+}
