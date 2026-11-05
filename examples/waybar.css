@@ -1,8 +1,0 @@
-/* Colors inherit from the current Waybar theme. */
-#custom-wireguard {
-  padding: 0 10px;
-  color: inherit;
-}
-#custom-wireguard.active { font-weight: 600; }
-#custom-wireguard.switching { opacity: 0.65; }
-#custom-wireguard.error { text-decoration: underline wavy; }

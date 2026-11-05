@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "namil27.wireguard",
+  "name": "WireGuard",
+  "version": "1.1.0",
+  "author": "Namil27",
+  "license": "MIT",
+  "description": "WireGuard status and profile controls for Omarchy Shell.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {"barWidget": "BarWidget.qml"},
+  "barWidget": {
+    "displayName": "WireGuard",
+    "description": "WireGuard profile status and controls.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

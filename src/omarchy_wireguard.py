@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
-"""Waybar front end for WireGuard connections owned by this application."""
+"""Omarchy Shell front end for WireGuard connections owned by this application."""
 import argparse
 import fcntl
-import html
 import json
 import logging
 import os
 from pathlib import Path
 import re
 import select
-import signal
 import subprocess
 import sys
 import tempfile
 import time
-import uuid
 
-APP = "waybar-wireguard"
+APP = "omarchy-wireguard"
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / APP
 STATE = STATE_DIR / "state.json"
+LEGACY_STATE = STATE_DIR.parent / "waybar-wireguard/state.json"
 LOCK = STATE_DIR / "operation.lock"
 LOG = STATE_DIR / "app.log"
 UUID = re.compile(r"\b[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\b")
@@ -32,6 +30,13 @@ ALLOWED = {
 def setup():
     STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(STATE_DIR, 0o700)
+    if not STATE.exists() and LEGACY_STATE.is_file():
+        try:
+            legacy = json.loads(LEGACY_STATE.read_text())
+            if isinstance(legacy.get("profiles"), dict):
+                save(legacy)
+        except (OSError, ValueError, TypeError):
+            pass
     logging.basicConfig(filename=LOG, level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
     if LOG.exists():
@@ -60,12 +65,6 @@ def save(data):
     finally:
         if os.path.exists(name):
             os.unlink(name)
-    signal_bar()
-
-
-def signal_bar():
-    subprocess.run(["pkill", "-RTMIN+8", "-x", "waybar"],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
 
 def run(*args, timeout=30):
@@ -140,8 +139,8 @@ def status():
         label, css, tooltip = "󰦖 VPN: ошибка", "error", data["error"]
     else:
         label, css, tooltip = "󰦖 VPN: выкл.", "inactive", "Профили приложения отключены"
-    print(json.dumps({"text": html.escape(label), "tooltip": html.escape(tooltip),
-                      "class": css}, ensure_ascii=False))
+    print(json.dumps({"text": label, "tooltip": tooltip, "class": css},
+                     ensure_ascii=False), flush=True)
 
 
 def validate_conf(path):
@@ -349,18 +348,38 @@ def manage():
                 save(data)
 
 
-def watch():
-    # One long-lived nmcli monitor; Waybar rereads only on changes and every 30 s.
+def state_version():
+    try:
+        info = STATE.stat()
+        return info.st_ino, info.st_mtime_ns
+    except OSError:
+        return None
+
+
+def stream():
+    # One long-lived nmcli monitor; cheap state-file checks and a 30 s handshake refresh.
     while True:
+        status()
+        version = state_version()
+        checked = time.monotonic()
         try:
             with subprocess.Popen(["nmcli", "monitor"], stdout=subprocess.PIPE,
                                   stderr=subprocess.DEVNULL, text=True, bufsize=1) as proc:
                 while proc.poll() is None:
-                    readable, _, _ = select.select([proc.stdout], [], [], 30)
+                    readable, _, _ = select.select([proc.stdout], [], [], 1)
+                    changed = False
                     if readable:
                         if not proc.stdout.readline():
                             break
-                    signal_bar()
+                        changed = True
+                    current = state_version()
+                    if current != version:
+                        version = current
+                        changed = True
+                    now = time.monotonic()
+                    if changed or now - checked >= 30:
+                        status()
+                        checked = now
         except OSError:
             pass
         time.sleep(5)
@@ -369,7 +388,7 @@ def watch():
 def main():
     setup()
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["status", "menu", "toggle", "watch", "import", "connect", "disconnect", "list"])
+    parser.add_argument("command", choices=["status", "menu", "toggle", "stream", "import", "connect", "disconnect", "list"])
     parser.add_argument("args", nargs="*")
     args = parser.parse_args()
     try:
@@ -380,8 +399,8 @@ def main():
         elif args.command == "toggle":
             data = read_state()
             change(None if active_owned(data) else data.get("quick"))
-        elif args.command == "watch":
-            watch()
+        elif args.command == "stream":
+            stream()
         elif args.command == "import":
             import_files(args.args)
         elif args.command == "connect":

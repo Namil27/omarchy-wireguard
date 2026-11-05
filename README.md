@@ -1,39 +1,37 @@
-# waybar-wireguard
+# omarchy-wireguard
 
-Управление WireGuard-профилями из Waybar через NetworkManager. Небольшой модуль показывает состояние туннеля, а меню позволяет импортировать, переключать и обслуживать профили без отдельного окна приложения.
+WireGuard в верхней панели Omarchy Shell. Виджет показывает состояние VPN, а меню на rofi позволяет импортировать и управлять профилями без отдельного приложения. Сетью управляет NetworkManager; существующие соединения вне проекта не меняются.
 
-Программа работает только с профилями, добавленными через неё. Существующие соединения NetworkManager остаются вне её управления.
+## Требования
+
+Omarchy Shell, NetworkManager с поддержкой WireGuard, Python 3.10+, `wireguard-tools`, `rofi`, `zenity` и `notify-send`. Для операций NetworkManager используется штатная авторизация Polkit. На Omarchy недостающие пакеты можно установить через `omarchy pkg add`.
 
 ## Установка
 
-Нужны NetworkManager, WireGuard Tools, Python 3.10+, Waybar, rofi-wayland, Zenity, libnotify и пользовательский сеанс systemd. На Arch Linux:
-
 ```sh
-sudo pacman -S networkmanager wireguard-tools python waybar rofi-wayland zenity libnotify
-git clone https://github.com/Namil27/waybar-wireguard.git
-cd waybar-wireguard
+git clone https://github.com/Namil27/omarchy-wireguard.git
+cd omarchy-wireguard
 ./scripts/install.sh
 ```
 
-Для операций NetworkManager используется системная авторизация Polkit. Пароль может потребоваться при импорте или переключении профиля.
-
-Добавьте `custom/wireguard` в нужный список модулей Waybar и перенесите его определение из [examples/waybar.jsonc](examples/waybar.jsonc) в свой конфиг. Стили из [examples/waybar.css](examples/waybar.css) можно добавить в `style.css`. Перед правкой существующих файлов сделайте копию. Меню использует [тему rofi Tokyo Night](examples/rofi.rasi); установленную копию можно изменить в `~/.local/share/waybar-wireguard/rofi.rasi`. Для значка нужен Nerd Font.
+Установщик создаёт команду `~/.local/bin/omarchy-wireguard`, добавляет виджет `namil27.wireguard` в правую часть панели и копирует тему меню. Перед заменой существующих файлов и изменением `~/.config/omarchy/shell.json` он делает резервные копии `*.bak.*`. Остальная раскладка панели сохраняется. Виджет наследует цвета Omarchy Shell; тему rofi можно изменить в `~/.local/share/omarchy-wireguard/rofi.rasi`.
 
 ## Как работает
 
-Импортированные `.conf` сохраняются как соединения NetworkManager без активации и автоподключения. Программа запоминает их UUID в `~/.local/state/waybar-wireguard/state.json` и по умолчанию допускает один активный профиль. При ошибке переключения предлагает восстановить предыдущий.
+Импорт `.conf` создаёт соединение NetworkManager без активации и автоподключения. Приложение хранит UUID своих профилей в `~/.local/state/omarchy-wireguard/state.json` и управляет только ими. Обычно активен один профиль; при ошибке переключения можно восстановить предыдущий.
 
-Индикатор отдельно показывает состояние туннеля и свежесть WireGuard handshake: наличие интерфейса само по себе не считается подтверждением связи с сервером. Пользовательский сервис следит за событиями NetworkManager и обновляет Waybar сигналом, без частого опроса. Неподдерживаемые параметры `.conf` отклоняются с указанием строки; скриптовые хуки не выполняются.
+Долгоживущий монитор отслеживает события NetworkManager и изменения состояния приложения. Статус туннеля обновляется сразу, свежесть WireGuard handshake перепроверяется раз в 30 секунд. Наличие интерфейса не выдаётся за подтверждённую связь с сервером. Неподдерживаемые параметры конфига отклоняются с номером строки; скриптовые хуки не запускаются.
 
 ## Диагностика
 
 ```sh
-~/.local/bin/waybar-wireguard status
-systemctl --user status waybar-wireguard-watch.service
-tail -n 30 ~/.local/state/waybar-wireguard/app.log
+~/.local/bin/omarchy-wireguard status
+omarchy plugin list
+tail -n 30 ~/.local/state/omarchy-wireguard/app.log
+python3 -m unittest discover -s tests -v
 ```
 
-Журнал не содержит ключей или содержимого конфигов. Код и тесты доступны в `src/` и `tests/`; запустить тесты можно командой `python3 -m unittest discover -s tests -v`.
+Журнал не сохраняет содержимое конфигов и вывод `nmcli`.
 
 ## Удаление
 
@@ -41,6 +39,6 @@ tail -n 30 ~/.local/state/waybar-wireguard/app.log
 ./scripts/uninstall.sh
 ```
 
-Затем удалите добавленный модуль и стили из Waybar. Удаление программы сохраняет импортированные соединения NetworkManager и локальное состояние. Если они больше не нужны, удалите их отдельно через NetworkManager.
+Скрипт убирает виджет и программу, сохраняя импортированные VPN-соединения NetworkManager и локальное состояние. Если они больше не нужны, удалите их отдельно через NetworkManager. Резервные копии файлов остаются на диске.
 
 Лицензия — [MIT](LICENSE).

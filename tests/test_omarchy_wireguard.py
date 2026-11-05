@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import patch
 import subprocess
 
-SOURCE = Path(__file__).resolve().parents[1] / "src/waybar_wireguard.py"
-spec = importlib.util.spec_from_file_location("waybar_wireguard", SOURCE)
+SOURCE = Path(__file__).resolve().parents[1] / "src/omarchy_wireguard.py"
+spec = importlib.util.spec_from_file_location("omarchy_wireguard", SOURCE)
 app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)
 
