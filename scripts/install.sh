@@ -14,6 +14,16 @@ if [[ ! -f "$shell_config" ]] || ! command -v omarchy >/dev/null; then
   exit 1
 fi
 
+if ! command -v rofi >/dev/null; then
+  printf 'Installing rofi for the WireGuard menu...\n'
+  omarchy pkg add rofi
+  hash -r
+  if ! command -v rofi >/dev/null; then
+    printf 'rofi installation did not provide the rofi command.\n' >&2
+    exit 1
+  fi
+fi
+
 backup() {
   if [[ -e "$1" || -L "$1" ]]; then
     cp -p -- "$1" "$1.bak.$(date +%Y%m%d-%H%M%S).$$"

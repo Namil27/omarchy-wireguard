@@ -4,7 +4,7 @@ WireGuard в верхней панели Omarchy Shell. Виджет показ�
 
 ## Требования
 
-Omarchy Shell, NetworkManager с поддержкой WireGuard, Python 3.10+, `wireguard-tools`, rofi с поддержкой Wayland, `zenity` и `notify-send`. Для операций NetworkManager используется штатная авторизация Polkit. На Omarchy недостающие пакеты можно установить через `omarchy pkg add rofi zenity libnotify wireguard-tools`.
+Omarchy Shell, NetworkManager с поддержкой WireGuard, Python 3.10+, `wireguard-tools`, rofi с поддержкой Wayland, `zenity` и `notify-send`. Установщик сам добавит rofi через `omarchy pkg add rofi`, если его нет; для установки пакета система может запросить пароль в терминале. Для операций NetworkManager используется штатная авторизация Polkit. Остальные недостающие пакеты можно установить через `omarchy pkg add zenity libnotify wireguard-tools`.
 
 ## Установка
 
