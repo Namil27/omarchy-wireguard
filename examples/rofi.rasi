@@ -1,0 +1,20 @@
+/* Tokyo Night palette from the stock Omarchy theme. */
+* {
+    background: #1a1b26;
+    foreground: #a9b1d6;
+    selected: #292e42;
+    accent: #7aa2f7;
+}
+window {
+    width: 30%;
+    background-color: @background;
+    border: 1px;
+    border-color: @accent;
+    border-radius: 8px;
+}
+mainbox { padding: 12px; spacing: 8px; }
+inputbar { text-color: @foreground; }
+listview { lines: 10; spacing: 4px; }
+element { padding: 7px; border-radius: 5px; }
+element selected { background-color: @selected; }
+element-text { text-color: @foreground; }

@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch NetworkManager events for Waybar WireGuard
+After=NetworkManager.service
+
+[Service]
+ExecStart=@COMMAND@ watch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

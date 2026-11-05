@@ -1,0 +1,12 @@
+// Add "custom/wireguard" to your existing modules-right array.
+{
+  "custom/wireguard": {
+    "exec": "$HOME/.local/bin/waybar-wireguard status",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 8,
+    "on-click": "$HOME/.local/bin/waybar-wireguard menu",
+    "on-click-right": "$HOME/.local/bin/waybar-wireguard toggle",
+    "escape": false
+  }
+}
